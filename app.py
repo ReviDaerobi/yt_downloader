@@ -12,10 +12,29 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# Ensure the cookies.txt content is written to /tmp
+def setup_cookies():
+    cookie_file_path = os.getenv("YT_COOKIES_PATH", "/tmp/cookies.txt")
+    cookie_content = """<your-cookie-content-here>"""  # Replace with the actual content of cookies.txt
+
+    if not os.path.exists(cookie_file_path):
+        with open(cookie_file_path, "w") as f:
+            f.write(cookie_content)
+    
+    return cookie_file_path
+
 def create_yt_dlp_opts(format_id=None, is_audio=False):
     """Create options for yt-dlp"""
-    cookie_file = os.getenv('YT_COOKIES_PATH')  # Load from environment variable
+    # Environment variable for cookies content (if any)
+    cookie_content = os.getenv("YT_COOKIES_CONTENT", "")
+    cookie_file_path = "/tmp/cookies.txt"  # Temporary writable path
 
+    # Write cookies to /tmp if content is provided
+    if cookie_content:
+        with open(cookie_file_path, "w") as f:
+            f.write(cookie_content)
+
+    # Define yt-dlp options
     if is_audio:
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -30,7 +49,7 @@ def create_yt_dlp_opts(format_id=None, is_audio=False):
             'format': format_id if format_id else 'bv*+ba/b',  # Best video+audio format
         }
 
-    # Common options
+    # Add common options
     ydl_opts.update({
         'quiet': True,
         'no_warnings': True,
@@ -41,7 +60,8 @@ def create_yt_dlp_opts(format_id=None, is_audio=False):
                 'skip': ['dash', 'hls'],  # Skip DASH and HLS formats
             },
         },
-        'cookiefile': cookie_file  # Include the cookie file in yt-dlp options
+        # Pass the temporary cookies file if it exists
+        'cookiefile': cookie_file_path if cookie_content else None
     })
 
     return ydl_opts
