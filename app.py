@@ -4,10 +4,18 @@ from yt_dlp import YoutubeDL
 import io
 import os
 
+from dotenv import load_dotenv
+import os
+
+# Load .env file
+load_dotenv()
+
 app = Flask(__name__)
 
 def create_yt_dlp_opts(format_id=None, is_audio=False):
     """Create options for yt-dlp"""
+    cookie_file = os.getenv('YT_COOKIES_PATH')  # Load from environment variable
+
     if is_audio:
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -19,7 +27,7 @@ def create_yt_dlp_opts(format_id=None, is_audio=False):
         }
     else:
         ydl_opts = {
-            'format': format_id if format_id else 'bv*+ba/b',  # Get best video+audio format
+            'format': format_id if format_id else 'bv*+ba/b',  # Best video+audio format
         }
 
     # Common options
@@ -33,12 +41,11 @@ def create_yt_dlp_opts(format_id=None, is_audio=False):
                 'skip': ['dash', 'hls'],  # Skip DASH and HLS formats
             },
         },
-        # Uncomment and set these if needed
-        # 'username': os.getenv('YT_USERNAME'),
-        # 'password': os.getenv('YT_PASSWORD'),
+        'cookiefile': cookie_file  # Include the cookie file in yt-dlp options
     })
 
     return ydl_opts
+
 
 @app.route('/')
 def index():
