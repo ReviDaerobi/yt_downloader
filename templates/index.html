@@ -31,6 +31,9 @@
             font-size: 16px;
             width: 100%;
         }
+        select {
+            max-width: 100%;
+        }
         .format-options {
             display: flex;
             gap: 20px;
@@ -48,37 +51,30 @@
         button:hover {
             background-color: #cc0000;
         }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        #loading, #error {
+        #loading {
             display: none;
             text-align: center;
             margin-top: 20px;
-            padding: 10px;
-            border-radius: 4px;
         }
-        #loading {
-            background-color: #e3f2fd;
-            color: #1976d2;
-        }
-        #error {
-            background-color: #ffebee;
-            color: #c62828;
-        }
-        .success {
-            background-color: #e8f5e9;
-            color: #2e7d32;
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 10px;
+        #format-select {
+            display: none;
         }
         #video-title {
             margin: 15px 0;
             padding: 10px;
             background-color: #f8f9fa;
             border-radius: 4px;
+            font-size: 1.1em;
+        }
+        .format-group {
+            margin-bottom: 10px;
+        }
+        option {
+            padding: 5px;
+        }
+        option[data-quality="HD"] {
+            color: #2ecc71;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -87,13 +83,12 @@
         <h1>YouTube Downloader</h1>
         <form id="url-form">
             <input type="url" id="url-input" placeholder="Enter YouTube URL" required>
-            <button type="submit" id="check-button">Check Available Formats</button>
+            <button type="submit">Check Available Formats</button>
         </form>
         
-        <div id="error"></div>
         <div id="video-title"></div>
 
-        <form id="download-form" action="/download" method="POST" style="display: none;">
+        <form id="download-form" action="/download" method="POST" style="display: none;" onsubmit="showLoading()">
             <input type="hidden" name="url" id="download-url">
             <div class="format-options">
                 <label>
@@ -105,30 +100,22 @@
                     Audio (MP3)
                 </label>
             </div>
-            <div id="format-select" style="display: none;">
-                <select name="format_id" id="resolution-select" required>
-                    <option value="">Select quality...</option>
+            <div id="format-select">
+                <select name="format_id" id="resolution-select" class="format-select">
+                    <option value="">Loading formats...</option>
                 </select>
             </div>
-            <button type="submit" id="download-button">Download</button>
+            <button type="submit">Download</button>
         </form>
         
-        <div id="loading">Processing... Please wait...</div>
+        <div id="loading">
+            <p>Downloading... Please wait...</p>
+        </div>
     </div>
 
     <script>
-        const urlForm = document.getElementById('url-form');
-        const downloadForm = document.getElementById('download-form');
-        const errorDiv = document.getElementById('error');
-        const loadingDiv = document.getElementById('loading');
-        const checkButton = document.getElementById('check-button');
-        const downloadButton = document.getElementById('download-button');
-
-        function showError(message) {
-            errorDiv.textContent = message;
-            errorDiv.style.display = 'block';
-            loadingDiv.style.display = 'none';
-            downloadForm.style.display = 'none';
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
         }
 
         function toggleFormatSelect() {
@@ -137,15 +124,9 @@
                 formatType === 'video' ? 'block' : 'none';
         }
 
-        urlForm.addEventListener('submit', async (e) => {
+        document.getElementById('url-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const url = document.getElementById('url-input').value;
-            
-            // Reset state
-            errorDiv.style.display = 'none';
-            loadingDiv.style.display = 'block';
-            downloadForm.style.display = 'none';
-            checkButton.disabled = true;
             
             try {
                 const response = await fetch('/get-formats', {
@@ -159,7 +140,7 @@
                 const data = await response.json();
                 
                 if (data.error) {
-                    showError(data.error);
+                    alert(data.error);
                     return;
                 }
 
@@ -168,33 +149,25 @@
                 
                 // Populate format select
                 const select = document.getElementById('resolution-select');
-                select.innerHTML = '<option value="">Select quality...</option>' + 
-                    data.formats.map(format => {
-                        const isHD = format.height >= 720;
-                        return `
-                            <option value="${format.format_id}" ${isHD ? 'class="hd-quality"' : ''}>
-                                ${format.label}
-                            </option>
-                        `;
-                    }).join('');
+                select.innerHTML = data.formats.map(format => {
+                    const isHD = format.height >= 720;
+                    const label = `${format.resolution} ${format.fps ? format.fps + 'fps' : ''} (${format.filesize})`;
+                    return `
+                        <option value="${format.format_id}" ${isHD ? 'data-quality="HD"' : ''}>
+                            ${label}
+                        </option>
+                    `;
+                }).join('');
 
                 // Show download form and set URL
-                downloadForm.style.display = 'flex';
+                document.getElementById('download-form').style.display = 'flex';
                 document.getElementById('download-url').value = url;
                 document.getElementById('format-select').style.display = 'block';
-                loadingDiv.style.display = 'none';
                 
             } catch (error) {
-                showError('Error fetching video information. Please try again.');
+                alert('Error fetching video information');
                 console.error(error);
-            } finally {
-                checkButton.disabled = false;
             }
-        });
-
-        downloadForm.addEventListener('submit', () => {
-            downloadButton.disabled = true;
-            loadingDiv.style.display = 'block';
         });
     </script>
 </body>

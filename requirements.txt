@@ -1,2 +1,4 @@
 flask
 yt-dlp
+browser-cookie3
+pywin32; platform_system == "Windows"
