@@ -3,35 +3,13 @@ from flask import Flask, render_template, request, send_file, jsonify, Response
 from yt_dlp import YoutubeDL
 import io
 import os
-import browser_cookie3  # Tambahkan ini
 
 app = Flask(__name__)
 
-def get_cookies():
-    """Get cookies from all supported browsers"""
-    try:
-        # Mencoba mendapatkan cookies dari berbagai browser
-        cookies = []
-        browsers = [
-            (browser_cookie3.chrome, "Chrome"),
-            (browser_cookie3.firefox, "Firefox"),
-            (browser_cookie3.edge, "Edge"),
-            (browser_cookie3.opera, "Opera"),
-            (browser_cookie3.brave, "Brave"),
-        ]
-        
-        for browser_func, name in browsers:
-            try:
-                cookies.extend([c for c in browser_func(domain_name='.youtube.com')])
-            except:
-                continue
-                
-        return cookies
-    except:
-        return None
-
-def get_yt_dlp_opts(format_id=None, is_audio=False):
-    """Get common yt-dlp options"""
+def get_buffer_stream(url, format_id=None, is_audio=False):
+    """Download to memory buffer instead of file"""
+    buffer = io.BytesIO()
+    
     if is_audio:
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -52,13 +30,20 @@ def get_yt_dlp_opts(format_id=None, is_audio=False):
     ydl_opts.update({
         'quiet': True,
         'no_warnings': True,
-        'extract_flat': False,
-        'cookiesfrombrowser': ('chrome',),  # Menggunakan cookies dari Chrome
-        # Alternatif menggunakan cookiefile jika di environment production
-        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+        'extract_flat': False
     })
 
-    return ydl_opts
+    with YoutubeDL(ydl_opts) as ydl:
+        # Get video info first
+        info = ydl.extract_info(url, download=False)
+        title = info.get('title', 'video')
+        
+        # Download to buffer
+        info = ydl.extract_info(url)
+        video_data = ydl.download([url])
+        
+    buffer.seek(0)
+    return buffer, title
 
 @app.route('/')
 def index():
@@ -71,7 +56,12 @@ def get_formats():
         return jsonify({'error': 'No URL provided'}), 400
 
     try:
-        ydl_opts = get_yt_dlp_opts()
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'format': 'best'
+        }
         
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -97,7 +87,7 @@ def get_formats():
                         'fps': fps,
                         'filesize': filesize,
                         'format_note': f.get('format_note', ''),
-                        'tbr': f.get('tbr', 0)
+                        'tbr': f.get('tbr', 0)  # Total bitrate
                     })
             
             # Sort by height then bitrate
@@ -137,28 +127,22 @@ def download():
         return 'Please provide a URL', 400
     
     try:
-        ydl_opts = get_yt_dlp_opts(
+        buffer, title = get_buffer_stream(
+            url, 
             format_id=format_id if format_type == 'video' else None,
             is_audio=format_type == 'audio'
         )
         
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            title = info.get('title', 'video')
-            
-            # Clean filename
-            clean_title = "".join(c for c in title if c.isalnum() or c in (' ','-','_')).rstrip()
-            filename = f"{clean_title}.{'mp3' if format_type == 'audio' else 'mp4'}"
-            
-            # Download
-            video_data = ydl.download([url])
-            
-            return send_file(
-                io.BytesIO(video_data),
-                as_attachment=True,
-                download_name=filename,
-                mimetype='audio/mp3' if format_type == 'audio' else 'video/mp4'
-            )
+        # Clean filename
+        clean_title = "".join(c for c in title if c.isalnum() or c in (' ','-','_')).rstrip()
+        filename = f"{clean_title}.{'mp3' if format_type == 'audio' else 'mp4'}"
+        
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='audio/mp3' if format_type == 'audio' else 'video/mp4'
+        )
         
     except Exception as e:
         return f'Error: {str(e)}', 500
